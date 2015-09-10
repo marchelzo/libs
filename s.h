@@ -14,3 +14,4 @@ char *_s_next(struct s_it *it);
 s_it s_split_on(char *s, char const *delim);
 s_it s_split_every(char *s, size_t n);
 s_it s_partition(char *s, char const *pattern);
+s_it s_words(char *s);
