@@ -3,8 +3,10 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <ctype.h>
 
 #include "s.h"
+#include "re.h"
 
 static bool prefix(char const *big, char const *small)
 {
@@ -16,11 +18,55 @@ static bool prefix(char const *big, char const *small)
         return !*small;
 }
 
-static char *pattern_match(char const *pattern, char const *s)
+static char *next_nothing(s_it *self)
 {
-        enum {
-                TODO
-        };
+        return NULL;
+}
+
+static char *next_count(s_it *self)
+{
+        size_t count = (uintptr_t) self->data;
+        if (count == 0) {
+                return NULL;
+        }
+
+        char *ret = self->s;
+
+        if (--count != 0) {
+                self->s += strlen(self->s);
+                while (*++self->s == 0x1F);
+        }
+
+        self->data = (uintptr_t) count;
+
+        return ret;
+}
+
+static char *next_matches(s_it *self)
+{
+        re_result m;
+
+        if (self->s == NULL) {
+                re_free(self->data);
+                return NULL;
+        }
+
+        *self->s = (uintptr_t) self->more_data;
+
+        if (!re_match(self->data, self->s, &m)) {
+                re_free(self->data);
+                return NULL;
+        }
+
+        if (*m.end == '\0')  {
+                self->s = NULL;
+        } else {
+                self->more_data = (uintptr_t) *m.end;
+                ((char *) m.end)[0] = '\0';
+                self->s = m.end;
+        }
+
+        return m.start;
 }
 
 static char *next_split_on(s_it *self)
@@ -143,6 +189,70 @@ s_it s_words(char *s)
         it.s = s;
         it.data = (uintptr_t) 0;
         it.next = next_words;
+
+        return it;
+}
+
+s_it s_lines(char *s)
+{
+        return s_split_on(s, "\n");
+}
+
+s_it s_matches(char *s, char const *pat)
+{
+        s_it it;
+
+        it.s = s;
+        it.data = re_compile(pat);
+        it.more_data = (uintptr_t) *s;
+        it.next = next_matches;
+        
+        return it;
+}
+
+s_it s_drop(size_t n, s_it it)
+{
+        size_t i;
+
+        for (i = 0; i < n; ++i) {
+                if (s_next(it) == NULL) {
+                        it.next = next_nothing;
+                        break;
+                }
+        }
+
+        return it;
+}
+
+s_it s_take(size_t n, s_it it)
+{
+        size_t i;
+        char *save = it.s;
+        char *prev;
+        char *current;
+
+        if ((save = s_next(it)) == NULL) {
+                it.next = next_nothing;
+                return it;
+        }
+
+        prev = save;
+        for (i = 1; i < n; ++i) {
+                prev = prev + strlen(prev);
+                current = s_next(it);
+                if (current == NULL) {
+                        break;
+                }
+                *prev = '\0';
+                while (prev + 1 < current) {
+                        *++prev = 0x1F;
+                }
+                prev = current;
+        }
+
+        it.s = save;
+        it.next = next_count;
+        it.data = (uintptr_t) i;
 
         return it;
 }
