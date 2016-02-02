@@ -1,4 +1,3 @@
-CC = gcc-5
 CFLAGS = -std=c11
 CFLAGS += -Wall
 CFLAGS += -Wextra
@@ -17,6 +16,7 @@ endif
 all: libs.a
 
 clean:
+	rm -rf *.o
 	rm -rf libs.a
 
 dotest: test
