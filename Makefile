@@ -6,16 +6,25 @@ CFLAGS += -pedantic
 CFLAGS += -Wno-parentheses
 CFLAGS += -Wno-int-conversion
 CFLAGS += -Wno-unused-parameter
-CFLAGS += -g3
 
-all: libs.a test
+ifdef RELEASE
+    CFLAGS += -Ofast
+else
+    CFLAGS += -g3
+    CFLAGS += -fsanitize=undefined
+endif
+
+
+all: libs.a dotest
 
 clean:
-	rm libs.a
+	rm -rf libs.a
+
+dotest: test clean
 	./test
 
 test: test.c libs.a
-	$(CC) $(CFLAGS) -o $@ $^ -lre
+	$(CC) $(CFLAGS) -o $@ $^
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
