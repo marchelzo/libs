@@ -1,14 +1,22 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 typedef struct s_it {
     char *(*next)(struct s_it *self);
     char *s;
     union {
-        void *data;
+        int_least64_t k;
+        size_t n;
+        void *ptr;
         int (*pred)(char const *);
     };
-    void *more_data;
+    union {
+        int_least64_t k2;
+        size_t n2;
+        void *ptr2;
+    };
 } s_it;
 
 char *_s_next(struct s_it *it);
@@ -21,3 +29,5 @@ s_it s_lines(char *s);
 s_it s_matches(char *s, char const *);
 s_it s_drop(size_t n, s_it it);
 s_it s_take(size_t n, s_it it);
+s_it s_take_while(bool (*pred)(char const *), s_it it);
+s_it s_filter(bool (*pred)(char const *), s_it it);

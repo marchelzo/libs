@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -18,6 +19,13 @@ static bool prefix(char const *big, char const *small)
         return !*small;
 }
 
+static bool const_true(char const *_)
+{
+        return true;
+}
+
+static s_it _s_take_n_while(size_t n, bool (*pred)(char const *), s_it it);
+
 static char *next_nothing(s_it *self)
 {
         return NULL;
@@ -25,7 +33,7 @@ static char *next_nothing(s_it *self)
 
 static char *next_count(s_it *self)
 {
-        size_t count = (uintptr_t) self->data;
+        size_t count = self->n;
         if (count == 0) {
                 return NULL;
         }
@@ -37,7 +45,7 @@ static char *next_count(s_it *self)
                 while (*++self->s == 0x1F);
         }
 
-        self->data = (uintptr_t) count;
+        self->n = count;
 
         return ret;
 }
@@ -47,21 +55,21 @@ static char *next_matches(s_it *self)
         re_result m;
 
         if (self->s == NULL) {
-                re_free(self->data);
+                re_free(self->ptr);
                 return NULL;
         }
 
-        *self->s = (uintptr_t) self->more_data;
+        *self->s = self->k2;
 
-        if (!re_match(self->data, self->s, &m)) {
-                re_free(self->data);
+        if (!re_match(self->ptr, self->s, &m)) {
+                re_free(self->ptr);
                 return NULL;
         }
 
         if (*m.end == '\0')  {
                 self->s = NULL;
         } else {
-                self->more_data = (uintptr_t) *m.end;
+                self->k2 = *m.end;
                 ((char *) m.end)[0] = '\0';
                 self->s = m.end;
         }
@@ -73,10 +81,10 @@ static char *next_split_on(s_it *self)
 {
         char *s = self->s;
 
-        while (*s && !prefix(s, self->data))
+        while (*s && !prefix(s, self->ptr))
                 s += 1;
 
-        while (*s && prefix(s + 1, self->data))
+        while (*s && prefix(s + 1, self->ptr))
                 s += 1;
 
         bool last = !*s;
@@ -98,15 +106,15 @@ static char *next_split_every(s_it *self)
 {
         char *s = self->s;
 
-        int saved = (intptr_t) self->more_data;
+        int saved = self->k2;
         if (saved != -1)
                 *s = saved;
 
-        size_t n = (uintptr_t) self->data;
+        size_t n = self->n;
         while (*s && n --> 0)
                 s += 1;
 
-        self->more_data = (intptr_t) *s;
+        self->k2 = *s;
         *s = 0;
 
         char *result;
@@ -123,12 +131,12 @@ static char *next_split_every(s_it *self)
 
 static char *next_words(s_it *self)
 {
-        if (((uintptr_t) self->data) == 2)
+        if (self->k == 2)
                 return NULL;
 
         char *s = self->s;
 
-        if (((uintptr_t) self->data) == 1)
+        if (self->k == 1)
                 s += 1;
 
         while (*s && isspace(*s))
@@ -143,9 +151,9 @@ static char *next_words(s_it *self)
                 return NULL;
 
         if (!*s)
-                self->data = (uintptr_t) 2;
+                self->k = 2;
         else
-                self->data = (uintptr_t) 1;
+                self->k = 1;
 
         *s = 0;
 
@@ -164,7 +172,7 @@ s_it s_split_on(char *s, char const *delim)
         s_it it;
 
         it.s = s;
-        it.data = delim;
+        it.ptr = delim;
         it.next = next_split_on;
 
         return it;
@@ -175,8 +183,8 @@ s_it s_split_every(char *s, size_t n)
         s_it it;
 
         it.s = s;
-        it.data = (uintptr_t) n;
-        it.more_data = (intptr_t) -1;
+        it.n = n;
+        it.k2 = -1;
         it.next = next_split_every;
 
         return it;
@@ -187,7 +195,7 @@ s_it s_words(char *s)
         s_it it;
 
         it.s = s;
-        it.data = (uintptr_t) 0;
+        it.k = 0;
         it.next = next_words;
 
         return it;
@@ -203,10 +211,10 @@ s_it s_matches(char *s, char const *pat)
         s_it it;
 
         it.s = s;
-        it.data = re_compile(pat);
-        it.more_data = (uintptr_t) *s;
+        it.ptr = re_compile(pat);
+        it.k2 = *s;
         it.next = next_matches;
-        
+
         return it;
 }
 
@@ -226,21 +234,80 @@ s_it s_drop(size_t n, s_it it)
 
 s_it s_take(size_t n, s_it it)
 {
+        return _s_take_n_while(n, const_true, it);
+}
+
+s_it s_take_while(bool (*pred)(char const *), s_it it)
+{
+        return _s_take_n_while(SIZE_MAX, pred, it);
+}
+
+bool _s_has_next(s_it *it)
+{
+        return false;
+}
+
+s_it s_filter(bool (*pred)(char const *), s_it it)
+{
         size_t i;
         char *save = it.s;
         char *prev;
         char *current;
 
-        if ((save = s_next(it)) == NULL) {
-                it.next = next_nothing;
-                return it;
-        }
+        do {
+                if ((save = s_next(it)) == NULL) {
+                        it.next = next_nothing;
+                        return it;
+                }
+        } while (!pred(save));
 
         prev = save;
+
+        i = 1;
+        for (;;) {
+                current = s_next(it);
+                if (current == NULL) {
+                        break;
+                }
+                if (!pred(current)) {
+                        continue;
+                }
+                prev = prev + strlen(prev);
+                *prev = '\0';
+                while (prev + 1 < current) {
+                        *++prev = 0x1F;
+                }
+                prev = current;
+                i += 1;
+        }
+
+        it.s = save;
+        it.next = next_count;
+        it.n = i;
+
+        return it;
+}
+
+static s_it _s_take_n_while(size_t n, bool (*pred)(char const *), s_it it)
+{
+        size_t i;
+        char *save = it.s;
+        char *prev;
+        char *current;
+
+        do {
+                if ((save = s_next(it)) == NULL) {
+                        it.next = next_nothing;
+                        return it;
+                }
+        } while (!pred(save));
+
+        prev = save;
+
         for (i = 1; i < n; ++i) {
                 prev = prev + strlen(prev);
                 current = s_next(it);
-                if (current == NULL) {
+                if (current == NULL || !pred(current)) {
                         break;
                 }
                 *prev = '\0';
@@ -252,7 +319,8 @@ s_it s_take(size_t n, s_it it)
 
         it.s = save;
         it.next = next_count;
-        it.data = (uintptr_t) i;
+        it.n = i;
 
         return it;
 }
+
