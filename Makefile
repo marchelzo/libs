@@ -11,16 +11,15 @@ ifdef RELEASE
     CFLAGS += -Ofast
 else
     CFLAGS += -g3
-    CFLAGS += -fsanitize=undefined
 endif
 
 
-all: libs.a dotest
+all: libs.a
 
 clean:
 	rm -rf libs.a
 
-dotest: test clean
+dotest: test
 	./test
 
 test: test.c libs.a
