@@ -1,5 +1,26 @@
 #include <stdio.h>
+#include <ctype.h>
 #include "s.h"
+
+static bool
+all_lowercase(char const *s)
+{
+    while (*s)
+        if (!islower(*s++))
+            return false;
+
+    return true;
+}
+
+static bool
+all_digits(char const *s)
+{
+    while (*s)
+        if (!isdigit(*s++))
+            return false;
+
+    return true;
+}
 
 int
 main(void)
@@ -10,6 +31,8 @@ main(void)
         char s4[] = "A_HHH B_343 asd asd a_123 okd 1_000\n";
         char s5[] = "The first three words will be skipped!";
         char s6[] = "Only three words will be used!";
+        char s7[] = "only lowercase words Will Be Taken";
+        char s8[] = "only 123 the 5 numbers in 56134 this 9213 string will be 0001 taken";
 
         s_it it = s_words(s);
 
@@ -49,6 +72,18 @@ main(void)
         it = s_take(3, s_words(s6));
         while (w = s_next(it)) {
                 printf("Word: |%s|\n", w);
+        }
+
+        printf("===> s_take_while <===\n");
+        it = s_take_while(all_lowercase, s_words(s7));
+        while (w = s_next(it)) {
+                printf("Word: |%s|\n", w);
+        }
+
+        printf("===> s_filter <===\n");
+        it = s_filter(all_digits, s_words(s8));
+        while (w = s_next(it)) {
+                printf("Number: |%s|\n", w);
         }
                         
         return 0;
