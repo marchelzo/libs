@@ -21,7 +21,7 @@ This means that things like `s_words("foo bar baz")` will result in undefined be
 
 int main(void)
 {
-        char string[] = "a: 12, b: 23: c: 19, k: 123, d: 123";
+        char string[] = "a: 12, b: 23, c: 19, k: 123, d: 123";
 
         s_it matches = s_take(3, s_matches(string, "[0-9]+"));
 
